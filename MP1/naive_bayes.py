@@ -47,11 +47,50 @@ Main function for training and predicting with naive bayes.
     You can modify the default values for the Laplace smoothing parameter and the prior for the positive label.
     Notice that we may pass in specific values for these parameters during our testing.
 """
+
+
+
 def naive_bayes(train_set, train_labels, dev_set, laplace=1.0, pos_prior=0.5, silently=False):
     print_values(laplace,pos_prior)
 
+    positive_counts = Counter()
+    negative_counts = Counter()
+
+    for review_as_list, label in zip(train_set, train_labels):
+        if label == 1:
+            positive_counts.update(review_as_list)
+        else:
+            negative_counts.update(review_as_list)
+
+    positive_words = positive_counts.keys()
+    negative_words = negative_counts.keys()
+
+    vocabulary = set(positive_words) | set(negative_words)
+    vocabulary_size = len(vocabulary)
+
+    total_positive_words = positive_counts.total()
+    total_negative_words = negative_counts.total()
+
     yhats = []
-    for doc in tqdm(dev_set, disable=silently):
-        yhats.append(-1)
+
+    pos_denominator = math.log(total_positive_words + laplace * vocabulary_size)
+    neg_denominator = math.log(total_negative_words + laplace * vocabulary_size)
+
+    for doc in dev_set:
+        log_prob_positive = math.log(pos_prior)
+        log_prob_negative = math.log(1 - pos_prior)
+        for word in doc:
+            pos_word_count = positive_counts.get(word, 0)
+            log_prob_positive += math.log(pos_word_count + laplace)
+            log_prob_positive -= pos_denominator
+            
+            neg_word_count = negative_counts.get(word,0)
+            log_prob_negative += math.log(neg_word_count + laplace)
+            log_prob_negative -= neg_denominator
+        
+        if log_prob_positive > log_prob_negative:
+            yhats.append(1)
+        else:
+            yhats.append(0)
 
     return yhats
