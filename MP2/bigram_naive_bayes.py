@@ -56,9 +56,66 @@ Main function for training and predicting with the bigram mixture model.
 def bigram_bayes(train_set, train_labels, dev_set, unigram_laplace=1.0, bigram_laplace=1.0, bigram_lambda=1.0, pos_prior=0.5, silently=False):
     print_values_bigram(unigram_laplace,bigram_laplace,bigram_lambda,pos_prior)
 
+    unigram_positive_counts = Counter()
+    unigram_negative_counts = Counter()
+    bigram_positive_counts = Counter()
+    bigram_negative_counts = Counter()
+
+    for review_as_list, label in zip(train_set, train_labels):
+        bigrams_in_review = []
+        for i in range(len(review_as_list) - 1):
+            bigram = (review_as_list[i], review_as_list[i+1])
+            bigrams_in_review.append(bigram)
+        if label == 1:
+            bigram_positive_counts.update(bigrams_in_review)
+            unigram_positive_counts.update(review_as_list)
+        else:
+            bigram_negative_counts.update(bigrams_in_review)
+            unigram_negative_counts.update(review_as_list)
+
+    total_positive_unigrams = unigram_positive_counts.total()
+    total_negative_unigrams = unigram_negative_counts.total()
+    total_positive_bigrams = bigram_positive_counts.total()
+    total_negative_bigrams = bigram_negative_counts.total()
+
+    unigram_positive_words = unigram_positive_counts.keys()
+    unigram_negative_words = unigram_negative_counts.keys()
+
+    unigram_vocabulary = set(unigram_positive_words) | set(unigram_negative_words)
+    unigram_vocabulary_size = len(unigram_vocabulary)
+
+
     yhats = []
-    for doc in tqdm(dev_set, disable=silently):
-        yhats.append(-1)
+    for doc in dev_set:
+        log_prob_positive = math.log(pos_prior)
+        log_prob_negative = math.log(1 - pos_prior)
+        if len(doc) > 0:
+            word = doc[0]
+            p_uni_pos = (unigram_positive_counts.get(word, 0) + unigram_laplace) / (total_positive_unigrams + unigram_laplace * unigram_vocabulary_size)
+            log_prob_positive += math.log(p_uni_pos)
+
+            p_uni_neg = (unigram_negative_counts.get(word, 0) + unigram_laplace) / (total_negative_unigrams + unigram_laplace * unigram_vocabulary_size)
+            log_prob_negative += math.log(p_uni_neg)
+
+        for i in range(1, len(doc)):
+            unigram = doc[i]
+            bigram = (doc[i-1], doc[i])
+            p_uni_pos = (unigram_positive_counts.get(unigram, 0) + unigram_laplace) / (total_positive_unigrams + unigram_laplace * unigram_vocabulary_size)
+            p_bi_pos = (bigram_positive_counts.get(bigram, 0) + bigram_laplace) / (total_positive_bigrams + bigram_laplace *unigram_vocabulary_size)
+
+            mixture_pos = (1 - bigram_lambda) * p_uni_pos + bigram_lambda * p_bi_pos
+            log_prob_positive += math.log(mixture_pos)
+
+            p_uni_neg = (unigram_negative_counts.get(unigram, 0) + unigram_laplace) / (total_negative_unigrams + unigram_laplace * unigram_vocabulary_size)
+            p_bi_neg = (bigram_negative_counts.get(bigram, 0) + bigram_laplace) / (total_negative_bigrams + bigram_laplace * unigram_vocabulary_size)
+
+            mixture_neg = (1 - bigram_lambda) * p_uni_neg + bigram_lambda * p_bi_neg
+            log_prob_negative += math.log(mixture_neg)
+
+        if log_prob_positive > log_prob_negative:
+            yhats.append(1)
+        else:
+            yhats.append(0)
 
     return yhats
 
